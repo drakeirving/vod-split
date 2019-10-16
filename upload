@@ -1,0 +1,6 @@
+youtube-upload \
+--title="${1%.*}" \
+--category="Gaming" \
+--tags="Jigglypuff, Smash, Ultimate" \
+--client-secrets="client_secrets.json" \
+"$1"

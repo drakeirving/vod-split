@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+
+print_help(){
+  echo -e "Usage: (URL|filename) [-u] [(-s <start> <end> <out_file>)]...
+
+Options:
+  -h --help\tShow this help screen.
+  -s --split\tSplit source VOD at given timestamps into file. Multiple uses of -s is fine.
+  -u --upload\tUpload any resulting VODs after splitting."
+}
+
+if (( $# == 0 )) || [[ $1 == "-h" || $1 == "--help" ]]; then
+  print_help
+fi
+
+if [[ $1 =~ https://www.youtube.com/watch\?v=.+ ]] || [[ $1 =~ https://www.twitch.tv/videos/.+ ]]; then
+  # Using Youtube URL as first parameter
+  f=$(youtube-dl --get-filename -o '%(id)s.%(ext)s' $1)
+  if [[ ! -e $f ]]; then
+    echo -e "\033[1;33mVOD does not exist, downloading...\033[0m"
+    youtube-dl -o '%(id)s.%(ext)s' $1
+  else
+    echo -e "\033[1;33mUsing "$f"\033[0m"
+  fi
+else
+  # Using filename as first parameter
+  f=$1
+fi
+
+ext=${f#*.}
+
+do_upload=0
+args=()
+# Options
+shift
+while [[ -n "$1" ]]; do case $1 in
+  -h | --help )
+    print_help; exit 0
+    ;;
+  -s | --split )
+    shift; args+=("$1" "$2" "$3"); shift 2
+    ;;
+  -u | --upload )
+    do_upload=1
+    ;;
+esac; shift; done
+
+# Splitting
+items=()
+if (( ${#args[@]} >= 3 )); then
+  if [[ -e $f ]]; then
+    for ((i=0; i < ${#args[@]}-1; i+=3)); do
+      ffmpeg -ss "${args[$i]}" -i "$f" -to "${args[$i+1]}" -c copy -copyts "${args[$i+2]}.$ext"
+      items+=("${args[$i+2]}.$ext")
+    done
+  else
+    echo -e "\033[0;31mVOD file \"$f\" does not exist, something went wrong.\033[0m"
+    exit 1
+  fi
+
+  # Uploading
+  if [[ $do_upload == 1 ]]; then
+    echo -e "\033[1;33mUploading...\033[0m"
+    for i in "${items[@]}"; do
+      if [[ -e "$i" ]]; then
+        ./upload "$i"
+      else
+        echo -e "\033[0;31mFile \"$i\" does not exist, something went wrong.\033[0m"
+      fi
+    done
+  fi
+fi
